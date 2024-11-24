@@ -37,6 +37,15 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
+// Define the User schema
+const userSchema = new mongoose.Schema({
+  name: String,
+  emailHash: String,
+  idNumber: String,
+  publicKey: String,
+});
+const User = mongoose.model("User", userSchema);
+
 // Routes
 app.get("/", (req, res) => {
   res.send("Blockchain backend server is running!");
@@ -46,37 +55,108 @@ app.get("/", (req, res) => {
 app.post("/api/register/blockchain", async (req, res) => {
   try {
     const { name, email, idNumber } = req.body;
+    console.log("Received Registration Data:", { name, email, idNumber });
 
     if (!name || !email || !idNumber) {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
+    // Hash email and ID for uniqueness
     const emailHash = crypto.createHash("sha256").update(email).digest("hex");
     const idHash = crypto.createHash("sha256").update(idNumber).digest("hex");
     const accounts = await web3.eth.getAccounts();
     const sender = accounts[0];
 
-    const isRegistered = await identityContract.methods.userRecords(sender).call();
+    console.log("Sender Address:", sender);
 
-    if (isRegistered) {
+    // Check if the user is already registered on the blockchain
+    const existingRecord = await identityContract.methods.userRecords(sender).call();
+    console.log("Blockchain registration check for sender:", sender, "Record:", existingRecord);
+
+    if (existingRecord && existingRecord.length > 0) {
       return res.status(400).json({ message: "User already registered on blockchain." });
     }
 
+    // Register user on the blockchain
+    console.log("Registering user on blockchain...");
     await identityContract.methods.register(emailHash).send({ from: sender, gas: 3000000 });
+    console.log("User successfully registered on blockchain:", sender);
 
-    const user = new mongoose.model("User", {
+    // Save user in MongoDB
+    const newUser = new User({
       name,
       emailHash,
       idNumber: idHash,
       publicKey: sender,
     });
 
-    await user.save();
+    await newUser.save();
+    console.log("User successfully saved in MongoDB:", sender);
 
     res.status(201).json({ message: "User registered successfully!", blockchainAddress: sender });
   } catch (error) {
-    console.error("Error during registration:", error.message);
+    console.error("Error during registration:", error);
     res.status(500).json({ message: "Registration failed.", error: error.message });
+  }
+});
+
+// Add Issuer Route
+app.post("/api/add-issuer", async (req, res) => {
+  try {
+    const { issuerAddress } = req.body;
+    console.log("Adding Issuer:", issuerAddress);
+
+    if (!issuerAddress) {
+      return res.status(400).json({ message: "Issuer address is required!" });
+    }
+
+    const accounts = await web3.eth.getAccounts();
+    const adminAddress = accounts[0];
+
+    await identityContract.methods.addIssuer(issuerAddress).send({ from: adminAddress, gas: 3000000 });
+    console.log("Issuer successfully added:", issuerAddress);
+
+    res.status(201).json({ message: "Issuer added successfully!" });
+  } catch (error) {
+    console.error("Error adding issuer:", error);
+    res.status(500).json({ message: "Failed to add issuer.", error: error.message });
+  }
+});
+
+// Add Verifier Route
+app.post("/api/add-verifier", async (req, res) => {
+  try {
+    const { verifierAddress } = req.body;
+    console.log("Adding Verifier:", verifierAddress);
+
+    if (!verifierAddress) {
+      return res.status(400).json({ message: "Verifier address is required!" });
+    }
+
+    const accounts = await web3.eth.getAccounts();
+    const adminAddress = accounts[0];
+
+    await identityContract.methods.addVerifier(verifierAddress).send({ from: adminAddress, gas: 3000000 });
+    console.log("Verifier successfully added:", verifierAddress);
+
+    res.status(201).json({ message: "Verifier added successfully!" });
+  } catch (error) {
+    console.error("Error adding verifier:", error);
+    res.status(500).json({ message: "Failed to add verifier.", error: error.message });
+  }
+});
+
+// Debug Route to Fetch Blockchain Records
+app.get("/api/debug/userRecords/:address", async (req, res) => {
+  try {
+    const userAddress = req.params.address;
+    console.log("Fetching blockchain record for:", userAddress);
+
+    const userRecord = await identityContract.methods.userRecords(userAddress).call();
+    res.status(200).json({ message: "User record fetched successfully", userRecord });
+  } catch (error) {
+    console.error("Error fetching user record:", error);
+    res.status(500).json({ message: "Failed to fetch user record.", error: error.message });
   }
 });
 

@@ -12,6 +12,7 @@ contract IdentityVerification {
     // Mappings
     mapping(address => string) public userRecords; // User data mapping
     mapping(address => mapping(string => Credential)) public credentials; // User credentials mapping
+    mapping(address => bool) private registeredUsers;
 
     // Role-based access control
     address public admin;
@@ -46,10 +47,12 @@ contract IdentityVerification {
 
     // Admin functions
     function addIssuer(address issuer) public onlyAdmin {
+        require(!issuers[issuer], "Issuer already exists");
         issuers[issuer] = true;
     }
 
     function addVerifier(address verifier) public onlyAdmin {
+        require(!verifiers[verifier], "Verifier already exists");
         verifiers[verifier] = true;
     }
 
@@ -61,9 +64,16 @@ contract IdentityVerification {
         verifiers[verifier] = false;
     }
 
+    // Admin function to transfer admin role
+    function transferAdmin(address newAdmin) public onlyAdmin {
+        require(newAdmin != address(0), "New admin cannot be zero address");
+        admin = newAdmin;
+    }
+
     // User registration
     function register(string memory hashedData) public {
-        require(bytes(userRecords[msg.sender]).length == 0, "User already registered");
+        require(!registeredUsers[msg.sender], "User already registered");
+        registeredUsers[msg.sender] = true;
         userRecords[msg.sender] = hashedData;
         emit UserRegistered(msg.sender, hashedData);
     }
@@ -92,10 +102,5 @@ contract IdentityVerification {
     function verifyCredential(address user, string memory dataHash) public view onlyVerifier returns (bool) {
         Credential storage credential = credentials[user][dataHash];
         return credential.valid;
-    }
-
-    // Admin function to transfer admin role
-    function transferAdmin(address newAdmin) public onlyAdmin {
-        admin = newAdmin;
     }
 }
