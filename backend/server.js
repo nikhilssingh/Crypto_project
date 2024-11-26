@@ -61,7 +61,6 @@ app.post("/api/register/blockchain", async (req, res) => {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
-    // Hash email and ID for uniqueness
     const emailHash = crypto.createHash("sha256").update(email).digest("hex");
     const idHash = crypto.createHash("sha256").update(idNumber).digest("hex");
     const accounts = await web3.eth.getAccounts();
@@ -71,18 +70,21 @@ app.post("/api/register/blockchain", async (req, res) => {
 
     // Check if the user is already registered on the blockchain
     const existingRecord = await identityContract.methods.userRecords(sender).call();
-    console.log("Blockchain registration check for sender:", sender, "Record:", existingRecord);
+    console.log("Existing Record:", existingRecord); // Log for debugging
 
-    if (existingRecord && existingRecord.length > 0) {
-      return res.status(400).json({ message: "User already registered on blockchain." });
+    if (existingRecord && existingRecord !== "") {
+      return res.status(400).json({
+        message: "User already registered on blockchain.",
+        userRecord: existingRecord,
+        blockchainAddress: sender,
+      });
     }
 
-    // Register user on the blockchain
+    // Register the user on the blockchain
     console.log("Registering user on blockchain...");
     await identityContract.methods.register(emailHash).send({ from: sender, gas: 3000000 });
-    console.log("User successfully registered on blockchain:", sender);
 
-    // Save user in MongoDB
+    // Save user data in MongoDB
     const newUser = new User({
       name,
       emailHash,

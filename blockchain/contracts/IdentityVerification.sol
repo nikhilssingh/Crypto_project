@@ -31,28 +31,28 @@ contract IdentityVerification {
 
     // Modifiers for access control
     modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin can perform this action");
+        require(msg.sender == admin, "Access Denied: Only admin can perform this action.");
         _;
     }
 
     modifier onlyIssuer() {
-        require(issuers[msg.sender], "Only an issuer can perform this action");
+        require(issuers[msg.sender], "Access Denied: Only an issuer can perform this action.");
         _;
     }
 
     modifier onlyVerifier() {
-        require(verifiers[msg.sender], "Only a verifier can perform this action");
+        require(verifiers[msg.sender], "Access Denied: Only a verifier can perform this action.");
         _;
     }
 
     // Admin functions
     function addIssuer(address issuer) public onlyAdmin {
-        require(!issuers[issuer], "Issuer already exists");
+        require(!issuers[issuer], "Issuer already exists.");
         issuers[issuer] = true;
     }
 
     function addVerifier(address verifier) public onlyAdmin {
-        require(!verifiers[verifier], "Verifier already exists");
+        require(!verifiers[verifier], "Verifier already exists.");
         verifiers[verifier] = true;
     }
 
@@ -66,23 +66,29 @@ contract IdentityVerification {
 
     // Admin function to transfer admin role
     function transferAdmin(address newAdmin) public onlyAdmin {
-        require(newAdmin != address(0), "New admin cannot be zero address");
+        require(newAdmin != address(0), "New admin address cannot be zero.");
         admin = newAdmin;
     }
 
     // User registration
     function register(string memory hashedData) public {
-        require(!registeredUsers[msg.sender], "User already registered");
-        registeredUsers[msg.sender] = true;
-        userRecords[msg.sender] = hashedData;
-        emit UserRegistered(msg.sender, hashedData);
+    require(!registeredUsers[msg.sender], "User already registered");
+    registeredUsers[msg.sender] = true;
+    userRecords[msg.sender] = hashedData;
+    emit UserRegistered(msg.sender, hashedData);
+}
+
+
+    // Retrieve registration status
+    function isUserRegistered(address user) public view returns (bool) {
+        return registeredUsers[user];
     }
 
     // Issuer functions
     function issueCredential(address user, string memory dataHash) public onlyIssuer {
-        require(bytes(userRecords[user]).length != 0, "User not registered");
+        require(bytes(userRecords[user]).length != 0, "Issue Error: User not registered.");
         Credential storage credential = credentials[user][dataHash];
-        require(!credential.valid, "Credential already exists");
+        require(!credential.valid, "Issue Error: Credential already exists.");
         credential.dataHash = dataHash;
         credential.issuer = msg.sender;
         credential.valid = true;
@@ -90,10 +96,13 @@ contract IdentityVerification {
     }
 
     // Revoke credential
-    function revokeCredential(address user, string memory dataHash) public onlyIssuer {
+    function revokeCredential(address user, string memory dataHash) public {
         Credential storage credential = credentials[user][dataHash];
-        require(credential.valid, "Credential does not exist or already revoked");
-        require(credential.issuer == msg.sender, "Only the issuer can revoke this credential");
+        require(credential.valid, "Revoke Error: Credential does not exist or already revoked.");
+        require(
+            credential.issuer == msg.sender || msg.sender == admin,
+            "Revoke Error: Only the issuer or admin can revoke this credential."
+        );
         credential.valid = false;
         emit CredentialRevoked(user, dataHash, msg.sender);
     }
@@ -101,6 +110,12 @@ contract IdentityVerification {
     // Verifier function to verify credential
     function verifyCredential(address user, string memory dataHash) public view onlyVerifier returns (bool) {
         Credential storage credential = credentials[user][dataHash];
+        require(bytes(userRecords[user]).length != 0, "Verification Error: User not registered.");
         return credential.valid;
+    }
+
+    // Retrieve user credentials
+    function getCredential(address user, string memory dataHash) public view returns (Credential memory) {
+        return credentials[user][dataHash];
     }
 }

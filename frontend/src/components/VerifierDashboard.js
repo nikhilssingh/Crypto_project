@@ -1,100 +1,79 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Web3 from "web3";
 import getContractInstance from "../contract";
 
 const VerifierDashboard = () => {
   const [userAddress, setUserAddress] = useState("");
   const [dataHash, setDataHash] = useState("");
-  const [isValid, setIsValid] = useState(null);
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const navigate = useNavigate();
+  const web3 = new Web3(window.ethereum);
 
   const handleVerifyCredential = async () => {
     try {
-      console.log("Starting credential verification...");
-      console.log("User Address:", userAddress);
-      console.log("Data Hash:", dataHash);
-
-      // Input validation
       if (!userAddress || !dataHash) {
-        alert("Both User Address and Data Hash are required!");
+        alert("Please provide both User Address and Data Hash for verification!");
         return;
       }
+      setIsLoading(true);
 
-      const { contractInstance, userAddress: verifierAddress } = await getContractInstance();
+      const { contractInstance } = await getContractInstance();
 
-      // Log verifier address
-      console.log("Verifier Address:", verifierAddress);
-
-      // Ensure the caller is a registered verifier
-      const isVerifier = await contractInstance.methods.verifiers(verifierAddress).call();
-      console.log("Is verifier:", isVerifier);
-
-      if (!isVerifier) {
-        alert("The current account is not a registered verifier.");
-        return;
+      if (!web3.utils.isAddress(userAddress)) {
+        throw new Error("Invalid Ethereum address.");
       }
 
-      // Check if credential exists for the user
-      const credential = await contractInstance.methods.credentials(userAddress, dataHash).call();
-      console.log("Credential Data:", credential);
-
-      if (!credential.valid) {
-        alert("The credential does not exist or is invalid.");
-        return;
-      }
-
-      // Verify the credential
       const isValid = await contractInstance.methods
         .verifyCredential(userAddress, dataHash)
-        .call({ from: verifierAddress, gas: 3000000 });
+        .call();
 
-      console.log("Verification Result:", isValid);
-      setIsValid(isValid);
+      setVerificationResult(isValid ? "Valid Credential" : "Invalid Credential");
     } catch (error) {
       console.error("Error verifying credential:", error);
-      alert("Error verifying credential: " + (error.message || error));
+      alert("Error verifying credential: " + error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h2>Verifier Dashboard</h2>
+  const goToNextPage = () => {
+    navigate("/admin"); // Replace with the actual route
+  };
 
-      <div style={{ marginBottom: "20px" }}>
+  return (
+    <div>
+      <h2>Verifier Dashboard</h2>
+      <div>
         <h3>Verify Credential</h3>
         <input
           type="text"
           placeholder="User Address"
           value={userAddress}
           onChange={(e) => setUserAddress(e.target.value)}
-          style={{ marginRight: "10px", padding: "5px", width: "300px" }}
         />
         <input
           type="text"
           placeholder="Data Hash"
           value={dataHash}
           onChange={(e) => setDataHash(e.target.value)}
-          style={{ marginRight: "10px", padding: "5px", width: "300px" }}
         />
-        <button
-          onClick={handleVerifyCredential}
-          style={{
-            backgroundColor: "#007BFF",
-            color: "#FFF",
-            border: "none",
-            padding: "10px 20px",
-            cursor: "pointer",
-          }}
-        >
-          Verify Credential
+        <button onClick={handleVerifyCredential} disabled={isLoading}>
+          {isLoading ? "Processing..." : "Verify Credential"}
         </button>
+        {verificationResult && (
+          <div>
+            <h4>Verification Result:</h4>
+            <textarea readOnly value={verificationResult}></textarea>
+          </div>
+        )}
       </div>
 
-      {isValid !== null && (
-        <div>
-          <p style={{ fontWeight: "bold" }}>
-            Credential is {isValid ? "valid ✅" : "invalid ❌"}
-          </p>
-        </div>
-      )}
+      <div style={{ marginTop: "20px" }}>
+        <button onClick={goToNextPage}>Go back to Admin Dashboard</button>
+      </div>
     </div>
   );
 };
